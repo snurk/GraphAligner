@@ -503,6 +503,28 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		coutoutput << "Read " << fastq->seq_id << " alignment took " << alntimems << "ms" << BufferedWriter::Flush;
 		if (alignments.alignments.size() > 0) alignments.alignments = AlignmentSelection::SelectAlignments(alignments.alignments, selectionOptions);
 
+		auto bad_alignment_f = [&] (const AlignmentResult::AlignmentItem &a) {
+			assert(a.alignmentEnd > a.alignmentStart);
+			size_t alignmentSize = a.alignmentEnd - a.alignmentStart;
+			//if (double(alignmentSize) / fastq->sequence.size() < 0.95) {
+			if (alignmentSize < fastq->sequence.size()) {
+				return true;
+			}
+			auto erate = double(a.alignmentScore) / fastq->sequence.size();
+			//std::cout << "Read " << fastq->seq_id << " had error-rate " << erate << std::endl;
+			if (erate > 0.01) {
+				//std::cout << "TOO HIGH" << std::endl;
+				return true;
+			} else {
+				//std::cout << "OK" << std::endl;
+			}
+			return false;
+		};
+
+		alignments.alignments.erase(
+				std::remove_if(alignments.alignments.begin(), alignments.alignments.end(), bad_alignment_f),
+				alignments.alignments.end());
+
 		//failed alignment, don't output
 		if (alignments.alignments.size() == 0)
 		{
