@@ -508,16 +508,21 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 			size_t alignmentSize = a.alignmentEnd - a.alignmentStart;
 			//if (double(alignmentSize) / fastq->sequence.size() < 0.95) {
 			if (alignmentSize < fastq->sequence.size()) {
-				return true;
+				std::cout << "HERE Read " << fastq->seq_id << " ALIGNMENT " << alignmentSize << " / " << fastq->sequence.size() << std::endl;
+				//return true;
+				return false;
 			}
 			auto erate = double(a.alignmentScore) / fastq->sequence.size();
 			//std::cout << "Read " << fastq->seq_id << " had error-rate " << erate << std::endl;
 			if (erate > 0.01) {
+				std::cout << "HERE Read " << fastq->seq_id << " ERATE " << erate << std::endl;
 				//std::cout << "TOO HIGH" << std::endl;
-				return true;
+				//return true;
+				return false;
 			} else {
 				//std::cout << "OK" << std::endl;
 			}
+			std::cout << "HERE Read " << fastq->seq_id << " OK " << std::endl;
 			return false;
 		};
 
