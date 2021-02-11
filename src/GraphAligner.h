@@ -131,22 +131,22 @@ public:
 		result.readName = seq_id;
 		assert(seedHits.size() > 0);
 		size_t seedScoreForEndToEndAln = 0;
-		size_t extendSeeds = 1000;
+		//size_t extendSeeds = 1000;
+		size_t extendSeeds = 100;
+		static const size_t ALLOW_FLANK = 50;
 		//size_t extendSeeds = params.seedExtendDensity * sequence.size() + 1;
-		if (params.seedExtendDensity == -1) extendSeeds = seedHits.size();
+		//if (params.seedExtendDensity == -1) extendSeeds = seedHits.size();
 		size_t worstExtendedSeedScore = 0;
 		std::string revSequence = CommonUtils::ReverseComplement(sequence);
 		
-		static const size_t GOODNESS_LEVELS_TO_EXPLORE = -1ul;//100;
-		size_t goodness_level_cnt = 0;
-		size_t curr_goodness = 0;
-
 		static const size_t BAD_EXTENSION_LIMIT = -1ul;//50;
 		size_t bad_extension_cnt = 0;
 
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
-			std::cout << "Considering seed # " << i << "; goodness: " << seedHits[i].seedGoodness << "; raw goodness: " << seedHits[i].rawSeedGoodness << "; (correction: " << (1. / seedHits[i].rawSeedGoodness) << ")" << std::endl;
+			const auto& seed_hit = seedHits[i];
+
+			//std::cout << "Considering seed # " << i << "; goodness: " << seed_hit.seedGoodness << "; raw goodness: " << seed_hit.rawSeedGoodness << "; (correction: " << (1. / seed_hit.rawSeedGoodness) << ")" << std::endl;
 			if (bad_extension_cnt > BAD_EXTENSION_LIMIT)
 			{
 				std::cout << "Read " << seq_id << " exceeded number of 'bad' extensions (" << BAD_EXTENSION_LIMIT << ")" << std::endl;
@@ -154,90 +154,70 @@ public:
 				break;
 			}
 
-			if (goodness_level_cnt > GOODNESS_LEVELS_TO_EXPLORE)
-			{
-				std::cout << "Read " << seq_id << " exceeded seedGoodness levels to explore (" << GOODNESS_LEVELS_TO_EXPLORE << ")" << std::endl;
-				logger << "Read " << seq_id << " exceeded seedGoodness levels to explore (" << GOODNESS_LEVELS_TO_EXPLORE << ")" << BufferedWriter::Flush;
-				break;
-			}
-
-			if (seedHits[i].seedGoodness != curr_goodness)
-			{
-				curr_goodness = seedHits[i].seedGoodness;
-				++goodness_level_cnt;
-			}
-
-			if (params.sloppyOptimizations && ((params.nondeterministicOptimizations && seedHits[i].seedGoodness == seedScoreForEndToEndAln) || seedHits[i].seedGoodness < seedScoreForEndToEndAln))
+			if (params.sloppyOptimizations && ((params.nondeterministicOptimizations && seed_hit.seedGoodness == seedScoreForEndToEndAln) || seed_hit.seedGoodness < seedScoreForEndToEndAln))
 			{
 				std::cout << "Read " << seq_id << " aligned end-to-end, skip rest of the seeds" << std::endl;
 				logger << "Read " << seq_id << " aligned end-to-end, skip rest of the seeds" << BufferedWriter::Flush;
 				break;
 			}
-			if (result.seedsExtended >= extendSeeds && (params.nondeterministicOptimizations || seedHits[i].seedGoodness < worstExtendedSeedScore))
+			if (result.seedsExtended >= extendSeeds && (params.nondeterministicOptimizations || seed_hit.seedGoodness < worstExtendedSeedScore))
 			{
 				std::cout << "Read " << seq_id << " enough seeds extended, skip rest" << std::endl;
 				logger << "Read " << seq_id << " enough seeds extended, skip rest" << BufferedWriter::Flush;
 				break;
 			}
-			assertSetRead(seq_id, seedHits[i].nodeID, seedHits[i].reverse, seedHits[i].seqPos, seedHits[i].matchLen, seedHits[i].nodeOffset);
+			assertSetRead(seq_id, seed_hit.nodeID, seed_hit.reverse, seed_hit.seqPos, seed_hit.matchLen, seed_hit.nodeOffset);
 			if (!logger.inputDiscarded()) logger << seq_id << " seed " << i << "/" << seedHits.size() << " " << ThreadReadAssertion::assertGetSeedInfo();
-			if (seedHits[i].seedClusterSize < params.minSeedClusterSize)
+			if (seed_hit.seedClusterSize < params.minSeedClusterSize)
 			{
 				logger << " skipped (cluster size)";
 				logger << BufferedWriter::Flush;
 				continue;
 			}
-			if (params.sloppyOptimizations)
+			//if (params.sloppyOptimizations)
+			//{
+			//	if (std::any_of(result.alignments.begin(), result.alignments.end(), [&] (const auto& aln) {
+			//				return aln.alignmentStart <= seed_hit.seqPos &&
+			//				aln.alignmentEnd >= seed_hit.seqPos &&
+			//				(params.nondeterministicOptimizations || aln.seedGoodness > seed_hit.seedGoodness);}))
+			//	{
+			//		logger << " skipped (overlap)";
+			//		logger << BufferedWriter::Flush;
+			//		continue;
+			//	}
+			//}
+			if (std::any_of(result.alignments.begin(), result.alignments.end(), [&] (const auto& aln) {
+						return exactAlignmentPart(aln, seed_hit);}))
+						//return aln.seedNodeId == seed_hit.nodeID && exactAlignmentPart(aln, seed_hit);}))
 			{
-				bool found = false;
-				for (const auto& aln : result.alignments)
-				{
-					if (aln.alignmentStart <= seedHits[i].seqPos && aln.alignmentEnd >= seedHits[i].seqPos && (params.nondeterministicOptimizations || aln.seedGoodness > seedHits[i].seedGoodness))
-					{
-						logger << " skipped (overlap)";
-						logger << BufferedWriter::Flush;
-						found = true;
-						break;
-					}
-				}
-				if (found) continue;
+				logger << " skipped (existing alignment)";
+				logger << BufferedWriter::Flush;
+				continue;
 			}
-			bool found = false;
-			for (const auto& aln : result.alignments)
-			{
-				if (exactAlignmentPart(aln, seedHits[i]))
-				{
-					logger << " skipped (existing alignment)";
-					logger << BufferedWriter::Flush;
-					found = true;
-					break;
-				}
-			}
-			if (found) continue;
 			logger << BufferedWriter::Flush;
-			worstExtendedSeedScore = seedHits[i].seedGoodness;
+			worstExtendedSeedScore = seed_hit.seedGoodness;
 			result.seedsExtended += 1;
-			auto item = getAlignmentFromSeed(seq_id, sequence, revSequence, seedHits[i], reusableState);
+			auto item = getAlignmentFromSeed(seq_id, sequence, revSequence, seed_hit, reusableState);
 
 			auto bad_alignment_f = [&] (const AlignmentResult::AlignmentItem &a) {
-				assert(a.alignmentEnd > a.alignmentStart);
-				size_t alignmentSize = a.alignmentEnd - a.alignmentStart;
-				//if (double(alignmentSize) / sequence.size() < 0.95) {
-				if (double(alignmentSize) / sequence.size() < 0.5) {
-					++bad_extension_cnt;
-				}
-				if (alignmentSize < sequence.size()) {
-					std::cout << "OPPA Read " << seq_id << " ALIGNMENT " << alignmentSize << " / " << sequence.size() << std::endl;
-					return true;
-				}
-				auto erate = double(a.alignmentScore) / sequence.size();
-				//std::cout << "Read " << seq_id << " had error-rate " << erate << std::endl;
-				if (erate > 0.01) {
-					std::cout << "OPPA Read " << seq_id << " ERATE " << erate << std::endl;
-					//std::cout << "TOO HIGH" << std::endl;
-					return true;
-				}
-				std::cout << "OPPA Read " << seq_id << " OK " << std::endl;
+			//	assert(a.alignmentEnd > a.alignmentStart);
+			//	size_t alignmentSize = a.alignmentEnd - a.alignmentStart;
+			//	//if (double(alignmentSize) / sequence.size() < 0.95) {
+			//	if (double(alignmentSize) / sequence.size() < 0.5) {
+			//		++bad_extension_cnt;
+			//	}
+			//	if (alignmentSize < sequence.size()) {
+			//		std::cout << "OPPA Read " << seq_id << " ALIGNMENT " << alignmentSize << " / " << sequence.size() << std::endl;
+			//		return true;
+			//	}
+			//	auto erate = double(a.alignmentScore) / sequence.size();
+			//	//std::cout << "Read " << seq_id << " had error-rate " << erate << std::endl;
+			//	if (erate > 0.01) {
+			//		std::cout << "OPPA Read " << seq_id << " ERATE " << erate << std::endl;
+			//		//std::cout << "TOO HIGH" << std::endl;
+			//		return true;
+			//	}
+			//	std::cout << "OPPA Read " << seq_id << " OK " << std::endl;
 				return false;
 			};
 
@@ -247,12 +227,13 @@ public:
 			//auto erate = double(a.alignmentScore) / sequence.size();
 
 			if (item.alignmentFailed() || bad_alignment_f(item)) continue;
-			item.seedGoodness = seedHits[i].seedGoodness;
+			item.seedGoodness = seed_hit.seedGoodness;
+			//item.seedNodeId = seed_hit.nodeId;
 			result.alignments.emplace_back(std::move(item));
-			if (params.sloppyOptimizations)
+			if (params.sloppyOptimizations && seedScoreForEndToEndAln == 0 && sequence.size() > ALLOW_FLANK)
 			{
 				std::sort(result.alignments.begin(), result.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
-				if (result.alignments[0].alignmentStart == 0)
+				if (result.alignments[0].alignmentStart <= ALLOW_FLANK)
 				{
 					size_t minSeedGoodness = result.alignments[0].seedGoodness;
 					size_t contiguousEnd = result.alignments[0].alignmentEnd;
@@ -264,7 +245,10 @@ public:
 							contiguousEnd = std::max(contiguousEnd, result.alignments[i].alignmentEnd);
 						}
 					}
-					if (contiguousEnd == sequence.size()) seedScoreForEndToEndAln = minSeedGoodness;
+					if (contiguousEnd >= sequence.size() - ALLOW_FLANK) {
+						//std::cout << "Assigning seed goodness threshold to " << size_t(0.95 * minSeedGoodness) << std::endl;
+						seedScoreForEndToEndAln = size_t(0.95 * minSeedGoodness);
+					}
 				}
 			}
 		}
@@ -394,7 +378,7 @@ public:
 				}
 				const int cluster_span = (int)seedHits[pair.second[i-1].first].seqPos - (int)seedHits[pair.second[clusterStart].first].seqPos +
 												(int)seedHits[pair.second[clusterStart].first].matchLen - 1;
-				static const size_t MIN_CLUSTER_SPAN = 500;
+				static const int MIN_CLUSTER_SPAN = 500;
 				double idy_est = (cluster_span >= MIN_CLUSTER_SPAN) ? ((double)matchingBps / cluster_span) : 0.;
 				for (size_t j = clusterStart; j < i; j++)
 				{

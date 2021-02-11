@@ -506,6 +506,7 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 		auto bad_alignment_f = [&] (const AlignmentResult::AlignmentItem &a) {
 			assert(a.alignmentEnd > a.alignmentStart);
 			size_t alignmentSize = a.alignmentEnd - a.alignmentStart;
+			//FIXME asking for 95% match seems much more reasonable (also can set higher --precise-clipping)
 			//if (double(alignmentSize) / fastq->sequence.size() < 0.95) {
 			if (alignmentSize < fastq->sequence.size()) {
 				std::cout << "HERE Read " << fastq->seq_id << " ALIGNMENT " << alignmentSize << " / " << fastq->sequence.size() << std::endl;
@@ -530,6 +531,8 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				std::remove_if(alignments.alignments.begin(), alignments.alignments.end(), bad_alignment_f),
 				alignments.alignments.end());
 
+		std::sort(alignments.alignments.begin(), alignments.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentScore < right.alignmentScore; });
+
 		//failed alignment, don't output
 		if (alignments.alignments.size() == 0)
 		{
@@ -546,6 +549,9 @@ void runComponentMappings(const AlignmentGraph& alignmentGraph, moodycamel::Conc
 				continue;
 			}
 			continue;
+		} else {
+			//Only keep the best identity one
+			//alignments.alignments = {alignments.alignments.front()};
 		}
 
 		stats.seedsExtended += alignments.seedsExtended;
