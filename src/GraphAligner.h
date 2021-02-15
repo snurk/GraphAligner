@@ -426,10 +426,10 @@ public:
 				assert(cluster_span > 0);
 				static const int MIN_CLUSTER_SPAN = 5000;
 
-				size_t matchingBps = computeCoverage(cluster_seed_ranges);
-				double idy_est =  (double)matchingBps / cluster_span;
-				//size_t matchingBps = computeCoverage(cluster_seed_ranges, MIN_CLUSTER_SPAN);
-				//double idy_est =  (double)matchingBps / MIN_CLUSTER_SPAN;
+				//size_t matchingBps = computeCoverage(cluster_seed_ranges);
+				//double idy_est =  (double)matchingBps / cluster_span;
+				size_t matchingBps = computeCoverage(cluster_seed_ranges, MIN_CLUSTER_SPAN);
+				double idy_est =  (double)matchingBps / MIN_CLUSTER_SPAN;
 
 				//static const int MAX_SEED_MULT = 1000;
 				for (size_t j = clusterStart; j < i; j++)
