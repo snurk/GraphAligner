@@ -521,7 +521,6 @@ void MinimizerSeeder::addMinimizers(std::vector<SeedHit>& result, std::vector<st
 
 std::vector<SeedHit> MinimizerSeeder::getSeeds(const std::string& sequence, double density) const
 {
-	std::cout << "Seed maxCount: " << maxCount << std::endl;
 	std::vector<std::tuple<size_t, size_t, size_t, size_t>> matchIndices;
 	iterateKmers(sequence, minimizerLength, windowSize, [this, &matchIndices](size_t pos, size_t kmer)
 	{
@@ -549,7 +548,7 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 	assert(nodeId < graph.nodeIDs.size());
 	assert(nodeId < graph.nodeOffset.size());
 	assert(nodeId < graph.reverse.size());
-	SeedHit result { graph.nodeIDs[nodeId]/2, nodeOffset + graph.nodeOffset[nodeId], seqPos, minimizerLength, count, graph.reverse[nodeId] };
+	SeedHit result { graph.nodeIDs[nodeId]/2, nodeOffset + graph.nodeOffset[nodeId], seqPos, minimizerLength, maxCount - count, graph.reverse[nodeId] };
 	result.alignmentGraphNodeId = nodeId;
 	result.alignmentGraphNodeOffset = nodeOffset;
 	return result;
@@ -557,7 +556,6 @@ SeedHit MinimizerSeeder::matchToSeedHit(int nodeId, size_t nodeOffset, size_t se
 
 void MinimizerSeeder::initMaxCount(double keepLeastFrequentFraction)
 {
-	//maxCount = 1000;
 	maxCount = 0;
 	std::vector<size_t> counts;
 	for (size_t bucket = 0; bucket < buckets.size(); bucket++)
