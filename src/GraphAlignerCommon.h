@@ -317,8 +317,8 @@ public:
 		corrected(),
 		alignment(),
 		trace(),
-		seedGoodness(0),
-		//seedNodeId(0),
+		seedGoodness(0.),
+		seedNodeId(0),
 		cellsProcessed(0),
 		elapsedMilliseconds(0),
 		alignmentStart(0),
@@ -331,8 +331,8 @@ public:
 		corrected(),
 		alignment(),
 		trace(),
-		seedGoodness(0),
-		//seedNodeId(0),
+		seedGoodness(0.),
+		seedNodeId(0),
 		cellsProcessed(cellsProcessed),
 		elapsedMilliseconds(ms),
 		alignmentStart(0),
@@ -356,8 +356,8 @@ public:
 		std::string GAFline;
 		std::shared_ptr<vg::Alignment> alignment;
 		std::shared_ptr<GraphAlignerCommon<size_t, int32_t, uint64_t>::OnewayTrace> trace;
-		size_t seedGoodness;
-		//int seedNodeId;
+		double seedGoodness;
+		int seedNodeId;
 		size_t cellsProcessed;
 		size_t elapsedMilliseconds;
 		size_t alignmentStart;

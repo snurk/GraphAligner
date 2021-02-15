@@ -130,7 +130,7 @@ public:
 		AlignmentResult result;
 		result.readName = seq_id;
 		assert(seedHits.size() > 0);
-		size_t seedScoreForEndToEndAln = 0;
+		double seedScoreForEndToEndAln = 0.;
 		//size_t extendSeeds = 1000;
 		size_t extendSeeds = 100;
 		static const size_t ALLOW_FLANK = 50;
@@ -145,8 +145,15 @@ public:
 		for (size_t i = 0; i < seedHits.size(); i++)
 		{
 			const auto& seed_hit = seedHits[i];
-
 			//std::cout << "Considering seed # " << i << "; goodness: " << seed_hit.seedGoodness << "; raw goodness: " << seed_hit.rawSeedGoodness << "; (correction: " << (1. / seed_hit.rawSeedGoodness) << ")" << std::endl;
+			logger << "Considering seed # " << i << "; goodness: " << seed_hit.seedGoodness << "; cluster size: " << seed_hit.seedClusterSize << "; raw goodness: " << seed_hit.rawSeedGoodness << "; (correction: " << (1. / seed_hit.rawSeedGoodness) << ")" << BufferedWriter::Flush;
+
+			if (seed_hit.seedGoodness == 0.) {
+				std::cout << "Read " << seq_id << " ran out of good seeds" << std::endl;
+				logger << "Read " << seq_id << " ran out of good seeds" << BufferedWriter::Flush;
+				break;
+			}
+
 			if (bad_extension_cnt > BAD_EXTENSION_LIMIT)
 			{
 				std::cout << "Read " << seq_id << " exceeded number of 'bad' extensions (" << BAD_EXTENSION_LIMIT << ")" << std::endl;
@@ -162,7 +169,7 @@ public:
 			}
 			if (result.seedsExtended >= extendSeeds && (params.nondeterministicOptimizations || seed_hit.seedGoodness < worstExtendedSeedScore))
 			{
-				std::cout << "Read " << seq_id << " enough seeds extended, skip rest" << std::endl;
+				//std::cout << "Read " << seq_id << " enough seeds extended, skip rest" << std::endl;
 				logger << "Read " << seq_id << " enough seeds extended, skip rest" << BufferedWriter::Flush;
 				break;
 			}
@@ -187,9 +194,10 @@ public:
 			//	}
 			//}
 			if (std::any_of(result.alignments.begin(), result.alignments.end(), [&] (const auto& aln) {
-						return exactAlignmentPart(aln, seed_hit);}))
-						//return aln.seedNodeId == seed_hit.nodeID && exactAlignmentPart(aln, seed_hit);}))
+						//return exactAlignmentPart(aln, seed_hit);}))
+						return aln.seedNodeId == seed_hit.nodeID && exactAlignmentPart(aln, seed_hit);}))
 			{
+				//std::cout << " skipped (existing alignment)" << std::endl;
 				logger << " skipped (existing alignment)";
 				logger << BufferedWriter::Flush;
 				continue;
@@ -228,14 +236,14 @@ public:
 
 			if (item.alignmentFailed() || bad_alignment_f(item)) continue;
 			item.seedGoodness = seed_hit.seedGoodness;
-			//item.seedNodeId = seed_hit.nodeId;
+			item.seedNodeId = seed_hit.nodeID;
 			result.alignments.emplace_back(std::move(item));
-			if (params.sloppyOptimizations && seedScoreForEndToEndAln == 0 && sequence.size() > ALLOW_FLANK)
+			if (params.sloppyOptimizations && seedScoreForEndToEndAln == 0. && sequence.size() > ALLOW_FLANK)
 			{
 				std::sort(result.alignments.begin(), result.alignments.end(), [](const AlignmentResult::AlignmentItem& left, const AlignmentResult::AlignmentItem& right) { return left.alignmentStart < right.alignmentStart; });
 				if (result.alignments[0].alignmentStart <= ALLOW_FLANK)
 				{
-					size_t minSeedGoodness = result.alignments[0].seedGoodness;
+					double minSeedGoodness = result.alignments[0].seedGoodness;
 					size_t contiguousEnd = result.alignments[0].alignmentEnd;
 					for (size_t i = 1; i < result.alignments.size(); i++)
 					{
@@ -247,7 +255,7 @@ public:
 					}
 					if (contiguousEnd >= sequence.size() - ALLOW_FLANK) {
 						//std::cout << "Assigning seed goodness threshold to " << size_t(0.95 * minSeedGoodness) << std::endl;
-						seedScoreForEndToEndAln = size_t(0.95 * minSeedGoodness);
+						seedScoreForEndToEndAln = 0.95 * minSeedGoodness;
 					}
 				}
 			}
@@ -324,6 +332,34 @@ public:
 		return result;
 	}
 
+	//TODO optimize if useful
+	size_t computeCoverage(const std::vector<std::pair<int, int>>& ranges, size_t window_size = size_t(-1)) const {
+		const int max_val = ranges.back().second;
+		std::vector<bool> covered_pos(max_val, false);
+		int last_end = 0;
+		for (const auto &r : ranges) {
+			assert(r.first <= r.second);
+			assert(r.second <= max_val);
+			for (int i = std::max(last_end, r.first); i < r.second; ++i) {
+				covered_pos[i] = true;
+			}
+			assert(r.second >= last_end);
+			last_end = r.second;
+		}
+		size_t max_window_coverage = 0;
+		size_t curr_window_coverage = 0;
+		for (int i = 0; i < max_val; ++i) {
+			if (covered_pos[i])
+				++curr_window_coverage;
+			if (i >= window_size) {
+				if (covered_pos[i - window_size])
+					--curr_window_coverage;
+			}
+			max_window_coverage = std::max(max_window_coverage, curr_window_coverage);
+		}
+		return max_window_coverage;
+	}
+
 	void orderSeedsByChaining(std::vector<SeedHit>& seedHits) const
 	{
 		phmap::flat_hash_map<size_t, std::vector<std::pair<size_t, size_t>>> seedPoses;
@@ -366,6 +402,15 @@ public:
 				std::sort(pair.second.begin()+clusterStart, pair.second.begin()+i, [&seedHits](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return seedHits[left.first].seqPos < seedHits[right.first].seqPos; });
 				size_t matchingBps = 0;
 				int lastEnd = std::numeric_limits<int>::min();
+
+				std::vector<std::pair<int, int>> cluster_seed_ranges(i - clusterStart);
+				for (size_t j = clusterStart; j < i; j++)
+				{
+					cluster_seed_ranges.emplace_back(
+							(int)seedHits[pair.second[j].first].seqPos - (int)seedHits[pair.second[j].first].matchLen + 1,
+							(int)seedHits[pair.second[j].first].seqPos);
+				}
+
 				for (size_t j = clusterStart; j < i; j++)
 				{
 					int thisStart = (int)seedHits[pair.second[j].first].seqPos - (int)seedHits[pair.second[j].first].matchLen + 1;
@@ -378,19 +423,31 @@ public:
 				}
 				const int cluster_span = (int)seedHits[pair.second[i-1].first].seqPos - (int)seedHits[pair.second[clusterStart].first].seqPos +
 												(int)seedHits[pair.second[clusterStart].first].matchLen - 1;
-				static const int MIN_CLUSTER_SPAN = 500;
-				double idy_est = (cluster_span >= MIN_CLUSTER_SPAN) ? ((double)matchingBps / cluster_span) : 0.;
+				assert(cluster_span > 0);
+				static const int MIN_CLUSTER_SPAN = 5000;
+
+				//size_t matchingBps = computeCoverage(cluster_seed_ranges);
+				double idy_est =  (double)matchingBps / cluster_span;
+				//size_t matchingBps = computeCoverage(cluster_seed_ranges, MIN_CLUSTER_SPAN);
+				//double idy_est =  (double)matchingBps / MIN_CLUSTER_SPAN;
+
+				//static const int MAX_SEED_MULT = 1000;
 				for (size_t j = clusterStart; j < i; j++)
 				{
-					double raw_correction = 1. / seedHits[pair.second[j].first].rawSeedGoodness;
+					//double raw_correction = 1. / seedHits[pair.second[j].first].rawSeedGoodness;
 					//seedHits[pair.second[j].first].seedGoodness = matchingBps + seedHits[pair.second[j].first].rawSeedGoodness;
 					//FIXME current version only for debug!
 					//seedHits[pair.second[j].first].rawSeedGoodness = size_t(100 * idy_est);
-					if (idy_est > raw_correction) {
-						seedHits[pair.second[j].first].seedGoodness = size_t(10000 * (idy_est - raw_correction));
+					if (cluster_span < MIN_CLUSTER_SPAN) {// || seedHits[pair.second[j].first].rawSeedGoodness > MAX_SEED_MULT) {
+						seedHits[pair.second[j].first].seedGoodness = 0.;
 					} else {
-						seedHits[pair.second[j].first].seedGoodness = 0;
+						seedHits[pair.second[j].first].seedGoodness = std::round(1000. * idy_est) + 1. / seedHits[pair.second[j].first].rawSeedGoodness;
 					}
+					//if (idy_est > raw_correction) {
+					//	seedHits[pair.second[j].first].seedGoodness = idy_est - raw_correction;
+					//} else {
+					//	seedHits[pair.second[j].first].seedGoodness = 0;
+					//}
 					seedHits[pair.second[j].first].seedClusterSize = i - clusterStart;
 				}
 				clusterStart = i;

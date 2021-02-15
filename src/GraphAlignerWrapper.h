@@ -45,7 +45,7 @@ public:
 	size_t alignmentGraphNodeId;
 	size_t alignmentGraphNodeOffset;
 	size_t rawSeedGoodness;
-	size_t seedGoodness;
+	double seedGoodness;
 	size_t seedClusterSize;
 };
 
