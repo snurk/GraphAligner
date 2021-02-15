@@ -400,8 +400,8 @@ public:
 				if (i < pair.second.size() && pair.second[i].second <= pair.second[i-1].second + 100) continue;
 				assert(i > clusterStart);
 				std::sort(pair.second.begin()+clusterStart, pair.second.begin()+i, [&seedHits](std::pair<size_t, size_t> left, std::pair<size_t, size_t> right) { return seedHits[left.first].seqPos < seedHits[right.first].seqPos; });
-				size_t matchingBps = 0;
-				int lastEnd = std::numeric_limits<int>::min();
+				//size_t matchingBps = 0;
+				//int lastEnd = std::numeric_limits<int>::min();
 
 				std::vector<std::pair<int, int>> cluster_seed_ranges(i - clusterStart);
 				for (size_t j = clusterStart; j < i; j++)
@@ -411,22 +411,22 @@ public:
 							(int)seedHits[pair.second[j].first].seqPos);
 				}
 
-				for (size_t j = clusterStart; j < i; j++)
-				{
-					int thisStart = (int)seedHits[pair.second[j].first].seqPos - (int)seedHits[pair.second[j].first].matchLen + 1;
-					int thisEnd = (int)seedHits[pair.second[j].first].seqPos;
-					assert(thisEnd >= lastEnd);
-					assert(thisEnd > thisStart);
-					matchingBps += (thisEnd - std::max(thisStart, lastEnd));
-					// matchingBps += seedHits[pair.second[j].first].rawSeedGoodness;
-					lastEnd = thisEnd;
-				}
+				//for (size_t j = clusterStart; j < i; j++)
+				//{
+				//	int thisStart = (int)seedHits[pair.second[j].first].seqPos - (int)seedHits[pair.second[j].first].matchLen + 1;
+				//	int thisEnd = (int)seedHits[pair.second[j].first].seqPos;
+				//	assert(thisEnd >= lastEnd);
+				//	assert(thisEnd > thisStart);
+				//	matchingBps += (thisEnd - std::max(thisStart, lastEnd));
+				//	// matchingBps += seedHits[pair.second[j].first].rawSeedGoodness;
+				//	lastEnd = thisEnd;
+				//}
 				const int cluster_span = (int)seedHits[pair.second[i-1].first].seqPos - (int)seedHits[pair.second[clusterStart].first].seqPos +
 												(int)seedHits[pair.second[clusterStart].first].matchLen - 1;
 				assert(cluster_span > 0);
 				static const int MIN_CLUSTER_SPAN = 5000;
 
-				//size_t matchingBps = computeCoverage(cluster_seed_ranges);
+				size_t matchingBps = computeCoverage(cluster_seed_ranges);
 				double idy_est =  (double)matchingBps / cluster_span;
 				//size_t matchingBps = computeCoverage(cluster_seed_ranges, MIN_CLUSTER_SPAN);
 				//double idy_est =  (double)matchingBps / MIN_CLUSTER_SPAN;
